@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Photo Grid App</title>
+    <style>
+      body {
+        font-family: "Segoe UI", sans-serif;
+        margin: 10px;
+        background-color: #f9f9f9;
+        color: #333;
+      }
+      .drop-area {
+        border: 2px dashed #ccc;
+        border-radius: 10px;
+        padding: 12px;
+        text-align: center;
+        background-color: #fff;
+        cursor: pointer;
+        margin-bottom: 10px;
+        transition: background-color 0.3s;
+      }
+      .drop-area.dragover {
+        background-color: #e0f7fa;
+        border-color: #00796b;
+      }
+      #grid {
+        display: grid;
+        grid-template-columns: repeat(4, 160px);
+        grid-template-rows: repeat(3, 160px);
+        gap: 6px;
+        margin-bottom: 12px;
+        justify-content: center;
+      }
+      .photo-box {
+        width: 160px;
+        height: 160px;
+        position: relative;
+        overflow: hidden;
+        border: 2px solid #ccc;
+        background: #eee;
+        cursor: grab;
+        border-radius: 6px;
+      }
+      .photo-box img {
+        position: absolute;
+        user-drag: none;
+        user-select: none;
+        -webkit-user-drag: none;
+        -webkit-user-select: none;
+      }
+      .button-container {
+        text-align: center;
+        margin-bottom: 10px;
+      }
+      button {
+        background-color: #00796b;
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        font-size: 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #004d40;
+      }
+      #downloadLink {
+        display: none;
+        margin-top: 10px;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="dropArea" class="drop-area">
+      Drag & Drop images here or click to select (max 12)
+      <input id="fileInput" type="file" multiple accept="image/*" hidden />
+    </div>
+    <div id="grid"></div>
+    <div class="button-container">
+      <button id="generateBtn">Generate Image</button>
+    </div>
+    <a id="downloadLink" href="#" download="photo-grid.png"
+      >Download Merged Image</a
+    >
+
+    <script>
+      const dropArea = document.getElementById("dropArea");
+      const fileInput = document.getElementById("fileInput");
+      const grid = document.getElementById("grid");
+      const generateBtn = document.getElementById("generateBtn");
+      const downloadLink = document.getElementById("downloadLink");
+
+      const cols = 4;
+      const rows = 3;
+      const boxSize = 160;
+      const maxPhotos = cols * rows;
+      let photos = [];
+
+      for (let i = 0; i < maxPhotos; i++) {
+        const box = document.createElement("div");
+        box.className = "photo-box";
+        box.dataset.index = i;
+        grid.appendChild(box);
+      }
+
+      dropArea.addEventListener("click", () => fileInput.click());
+      dropArea.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropArea.classList.add("dragover");
+      });
+      dropArea.addEventListener("dragleave", () => {
+        dropArea.classList.remove("dragover");
+      });
+      dropArea.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropArea.classList.remove("dragover");
+        handleFiles(e.dataTransfer.files);
+      });
+      fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
+
+      function handleFiles(files) {
+        const selected = Array.from(files).slice(0, maxPhotos);
+        photos = [];
+        clearGrid();
+        selected.forEach((file, i) => {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.src = url;
+          img.onload = () => setupPhoto(i, img);
+        });
+      }
+
+      function clearGrid() {
+        grid
+          .querySelectorAll(".photo-box")
+          .forEach((box) => (box.innerHTML = ""));
+      }
+
+      function setupPhoto(index, img) {
+        const box = grid.querySelector(`.photo-box[data-index="${index}"]`);
+        if (!box) return;
+
+        const imgRatio = img.naturalWidth / img.naturalHeight;
+        let displayWidth, displayHeight;
+
+        if (imgRatio > 1) {
+          displayHeight = boxSize;
+          displayWidth = imgRatio * boxSize;
+        } else {
+          displayWidth = boxSize;
+          displayHeight = boxSize / imgRatio;
+        }
+
+        img.style.width = displayWidth + "px";
+        img.style.height = displayHeight + "px";
+        let left = (boxSize - displayWidth) / 2;
+        let top = (boxSize - displayHeight) / 2;
+        img.style.left = left + "px";
+        img.style.top = top + "px";
+
+        let dragStartX,
+          dragStartY,
+          imgStartLeft,
+          imgStartTop,
+          dragging = false;
+        function clamp(v, min, max) {
+          return Math.min(Math.max(v, min), max);
+        }
+
+        img.addEventListener("mousedown", (e) => {
+          dragging = true;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          imgStartLeft = parseFloat(img.style.left);
+          imgStartTop = parseFloat(img.style.top);
+          img.style.cursor = "grabbing";
+        });
+
+        window.addEventListener("mousemove", (e) => {
+          if (!dragging) return;
+          const dx = e.clientX - dragStartX;
+          const dy = e.clientY - dragStartY;
+          let newLeft = clamp(imgStartLeft + dx, boxSize - displayWidth, 0);
+          let newTop = clamp(imgStartTop + dy, boxSize - displayHeight, 0);
+          img.style.left = newLeft + "px";
+          img.style.top = newTop + "px";
+          photos[index].offsetX = newLeft;
+          photos[index].offsetY = newTop;
+        });
+
+        window.addEventListener("mouseup", () => {
+          if (dragging) {
+            dragging = false;
+            img.style.cursor = "grab";
+          }
+        });
+
+        box.innerHTML = "";
+        box.appendChild(img);
+
+        photos[index] = {
+          img,
+          offsetX: left,
+          offsetY: top,
+          displayWidth,
+          displayHeight,
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight,
+        };
+      }
+
+      generateBtn.addEventListener("click", () => {
+        if (photos.length === 0) {
+          alert("Please load some images first.");
+          return;
+        }
+        generateMergedImage();
+      });
+
+      function generateMergedImage() {
+        const exportScale = 2.5;
+        const canvasWidth = cols * boxSize * exportScale;
+        const canvasHeight = rows * boxSize * exportScale;
+        const canvas = document.createElement("canvas");
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        for (let i = 0; i < maxPhotos; i++) {
+          const photo = photos[i];
+          if (!photo) continue;
+
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          const destX = col * boxSize;
+          const destY = row * boxSize;
+
+          const scaleX = photo.naturalWidth / photo.displayWidth;
+          const scaleY = photo.naturalHeight / photo.displayHeight;
+
+          const srcX = -photo.offsetX * scaleX;
+          const srcY = -photo.offsetY * scaleY;
+          const srcWidth = boxSize * scaleX;
+          const srcHeight = boxSize * scaleY;
+
+          ctx.drawImage(
+            photo.img,
+            srcX,
+            srcY,
+            srcWidth,
+            srcHeight,
+            destX * exportScale,
+            destY * exportScale,
+            boxSize * exportScale,
+            boxSize * exportScale
+          );
+        }
+
+        const dataURL = canvas.toDataURL("image/png");
+        downloadLink.href = dataURL;
+        downloadLink.style.display = "inline-block";
+        downloadLink.click();
+      }
+    </script>
+  </body>
+</html>
