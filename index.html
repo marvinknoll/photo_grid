@@ -29,6 +29,7 @@
       #grid {
         display: grid;
         grid-template-columns: repeat(4, 160px);
+        grid-template-rows: repeat(3, 160px);
         gap: 6px;
         margin-bottom: 10px;
         justify-content: center;
@@ -49,6 +50,7 @@
         user-select: none;
         -webkit-user-drag: none;
         -webkit-user-select: none;
+        touch-action: none;
       }
       button {
         background-color: #00796b;
@@ -72,7 +74,6 @@
         text-align: center;
       }
 
-      /* Responsive adjustments for smaller screens */
       @media (max-width: 700px) {
         #grid {
           grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -80,7 +81,7 @@
         }
         .photo-box {
           width: 100%;
-          height: 120px;
+          aspect-ratio: 1 / 1;
         }
       }
     </style>
@@ -105,25 +106,16 @@
 
       const cols = 4;
       const rows = 3;
-      const boxSizeDefault = 160;
-      const boxSizeMobile = 120;
+      const boxSizeDesktop = 160;
       const maxPhotos = cols * rows;
       let photos = [];
 
-      function getBoxSize() {
-        return window.innerWidth <= 700 ? boxSizeMobile : boxSizeDefault;
+      for (let i = 0; i < maxPhotos; i++) {
+        const box = document.createElement("div");
+        box.className = "photo-box";
+        box.dataset.index = i;
+        grid.appendChild(box);
       }
-
-      function createGridBoxes() {
-        grid.innerHTML = "";
-        for (let i = 0; i < maxPhotos; i++) {
-          const box = document.createElement("div");
-          box.className = "photo-box";
-          box.dataset.index = i;
-          grid.appendChild(box);
-        }
-      }
-      createGridBoxes();
 
       dropArea.addEventListener("click", () => fileInput.click());
       dropArea.addEventListener("dragover", (e) => {
@@ -139,14 +131,6 @@
         handleFiles(e.dataTransfer.files);
       });
       fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
-
-      window.addEventListener("resize", () => {
-        // On resize, adjust all images positions and sizes to new box size
-        photos.forEach((photo, i) => {
-          if (!photo) return;
-          setupPhoto(i, photo.img);
-        });
-      });
 
       async function handleFiles(files) {
         const selected = Array.from(files).slice(0, maxPhotos);
@@ -191,25 +175,28 @@
       }
 
       function setupPhoto(index, img) {
-        const boxSize = getBoxSize();
         const box = grid.querySelector(`.photo-box[data-index="${index}"]`);
         if (!box) return;
+
+        // Use actual box size dynamically:
+        const rect = box.getBoundingClientRect();
+        const currentBoxSize = rect.width; // width and height are equal due to aspect-ratio
 
         const imgRatio = img.naturalWidth / img.naturalHeight;
         let displayWidth, displayHeight;
 
         if (imgRatio > 1) {
-          displayHeight = boxSize;
-          displayWidth = imgRatio * boxSize;
+          displayHeight = currentBoxSize;
+          displayWidth = imgRatio * currentBoxSize;
         } else {
-          displayWidth = boxSize;
-          displayHeight = boxSize / imgRatio;
+          displayWidth = currentBoxSize;
+          displayHeight = currentBoxSize / imgRatio;
         }
 
         img.style.width = displayWidth + "px";
         img.style.height = displayHeight + "px";
-        let left = (boxSize - displayWidth) / 2;
-        let top = (boxSize - displayHeight) / 2;
+        let left = (currentBoxSize - displayWidth) / 2;
+        let top = (currentBoxSize - displayHeight) / 2;
         img.style.left = left + "px";
         img.style.top = top + "px";
 
@@ -218,72 +205,62 @@
           imgStartLeft,
           imgStartTop,
           dragging = false;
+
         function clamp(v, min, max) {
           return Math.min(Math.max(v, min), max);
         }
 
-        img.style.cursor = "grab";
-
-        img.addEventListener("mousedown", (e) => {
+        function onPointerDown(e) {
+          e.preventDefault();
           dragging = true;
-          dragStartX = e.clientX;
-          dragStartY = e.clientY;
+          dragStartX = e.clientX || e.touches[0].clientX;
+          dragStartY = e.clientY || e.touches[0].clientY;
           imgStartLeft = parseFloat(img.style.left);
           imgStartTop = parseFloat(img.style.top);
           img.style.cursor = "grabbing";
-          e.preventDefault();
-        });
+        }
 
-        window.addEventListener("mousemove", (e) => {
+        function onPointerMove(e) {
           if (!dragging) return;
-          const dx = e.clientX - dragStartX;
-          const dy = e.clientY - dragStartY;
-          let newLeft = clamp(imgStartLeft + dx, boxSize - displayWidth, 0);
-          let newTop = clamp(imgStartTop + dy, boxSize - displayHeight, 0);
+          const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+          const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+          if (clientX === undefined || clientY === undefined) return;
+
+          const dx = clientX - dragStartX;
+          const dy = clientY - dragStartY;
+
+          let newLeft = clamp(
+            imgStartLeft + dx,
+            currentBoxSize - displayWidth,
+            0
+          );
+          let newTop = clamp(
+            imgStartTop + dy,
+            currentBoxSize - displayHeight,
+            0
+          );
           img.style.left = newLeft + "px";
           img.style.top = newTop + "px";
           photos[index].offsetX = newLeft;
           photos[index].offsetY = newTop;
-        });
+        }
 
-        window.addEventListener("mouseup", () => {
+        function onPointerUp() {
           if (dragging) {
             dragging = false;
             img.style.cursor = "grab";
           }
-        });
+        }
 
-        // Support touch events for mobile drag
-        img.addEventListener("touchstart", (e) => {
-          dragging = true;
-          const touch = e.touches[0];
-          dragStartX = touch.clientX;
-          dragStartY = touch.clientY;
-          imgStartLeft = parseFloat(img.style.left);
-          imgStartTop = parseFloat(img.style.top);
-          img.style.cursor = "grabbing";
-          e.preventDefault();
-        });
+        // Remove old listeners before adding new ones to avoid duplicates
+        img.onpointerdown = null;
+        window.onpointermove = null;
+        window.onpointerup = null;
 
-        window.addEventListener("touchmove", (e) => {
-          if (!dragging) return;
-          const touch = e.touches[0];
-          const dx = touch.clientX - dragStartX;
-          const dy = touch.clientY - dragStartY;
-          let newLeft = clamp(imgStartLeft + dx, boxSize - displayWidth, 0);
-          let newTop = clamp(imgStartTop + dy, boxSize - displayHeight, 0);
-          img.style.left = newLeft + "px";
-          img.style.top = newTop + "px";
-          photos[index].offsetX = newLeft;
-          photos[index].offsetY = newTop;
-        });
-
-        window.addEventListener("touchend", () => {
-          if (dragging) {
-            dragging = false;
-            img.style.cursor = "grab";
-          }
-        });
+        // Use pointer events for better support of mouse + touch
+        img.addEventListener("pointerdown", onPointerDown);
+        window.addEventListener("pointermove", onPointerMove);
+        window.addEventListener("pointerup", onPointerUp);
 
         box.innerHTML = "";
         box.appendChild(img);
@@ -299,6 +276,15 @@
         };
       }
 
+      // Recalculate all images on resize (to keep squares and reposition images)
+      window.addEventListener("resize", () => {
+        for (let i = 0; i < photos.length; i++) {
+          const photo = photos[i];
+          if (!photo) continue;
+          setupPhoto(i, photo.img);
+        }
+      });
+
       generateBtn.addEventListener("click", () => {
         if (photos.length === 0) {
           alert("Please load some images first.");
@@ -309,9 +295,8 @@
 
       function generateMergedImage() {
         const exportScale = 2.5;
-        const boxSize = getBoxSize();
-        const canvasWidth = cols * boxSize * exportScale;
-        const canvasHeight = rows * boxSize * exportScale;
+        const canvasWidth = cols * boxSizeDesktop * exportScale;
+        const canvasHeight = rows * boxSizeDesktop * exportScale;
         const canvas = document.createElement("canvas");
         canvas.width = canvasWidth;
         canvas.height = canvasHeight;
@@ -325,16 +310,16 @@
 
           const col = i % cols;
           const row = Math.floor(i / cols);
-          const destX = col * boxSize;
-          const destY = row * boxSize;
+          const destX = col * boxSizeDesktop;
+          const destY = row * boxSizeDesktop;
 
           const scaleX = photo.naturalWidth / photo.displayWidth;
           const scaleY = photo.naturalHeight / photo.displayHeight;
 
           const srcX = -photo.offsetX * scaleX;
           const srcY = -photo.offsetY * scaleY;
-          const srcWidth = boxSize * scaleX;
-          const srcHeight = boxSize * scaleY;
+          const srcWidth = boxSizeDesktop * scaleX;
+          const srcHeight = boxSizeDesktop * scaleY;
 
           ctx.drawImage(
             photo.img,
@@ -344,8 +329,8 @@
             srcHeight,
             destX * exportScale,
             destY * exportScale,
-            boxSize * exportScale,
-            boxSize * exportScale
+            boxSizeDesktop * exportScale,
+            boxSizeDesktop * exportScale
           );
         }
 
