@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Photo Grid App</title>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.3/dist/heic2any.min.js"></script>
     <style>
       body {
         font-family: "Segoe UI", sans-serif;
@@ -14,7 +15,7 @@
       .drop-area {
         border: 2px dashed #ccc;
         border-radius: 10px;
-        padding: 12px;
+        padding: 15px;
         text-align: center;
         background-color: #fff;
         cursor: pointer;
@@ -30,7 +31,7 @@
         grid-template-columns: repeat(4, 160px);
         grid-template-rows: repeat(3, 160px);
         gap: 6px;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         justify-content: center;
       }
       .photo-box {
@@ -50,10 +51,6 @@
         -webkit-user-drag: none;
         -webkit-user-select: none;
       }
-      .button-container {
-        text-align: center;
-        margin-bottom: 10px;
-      }
       button {
         background-color: #00796b;
         color: white;
@@ -63,6 +60,8 @@
         border-radius: 6px;
         cursor: pointer;
         transition: background-color 0.3s;
+        display: block;
+        margin: 0 auto;
       }
       button:hover {
         background-color: #004d40;
@@ -71,6 +70,7 @@
         display: none;
         margin-top: 10px;
         font-size: 16px;
+        text-align: center;
       }
     </style>
   </head>
@@ -80,9 +80,7 @@
       <input id="fileInput" type="file" multiple accept="image/*" hidden />
     </div>
     <div id="grid"></div>
-    <div class="button-container">
-      <button id="generateBtn">Generate Image</button>
-    </div>
+    <button id="generateBtn">Generate Image</button>
     <a id="downloadLink" href="#" download="photo-grid.png"
       >Download Merged Image</a
     >
@@ -122,16 +120,40 @@
       });
       fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
 
-      function handleFiles(files) {
+      async function handleFiles(files) {
         const selected = Array.from(files).slice(0, maxPhotos);
         photos = [];
         clearGrid();
-        selected.forEach((file, i) => {
+
+        for (let i = 0; i < selected.length; i++) {
+          let file = selected[i];
+
+          if (file.name.toLowerCase().endsWith(".heic")) {
+            try {
+              const blob = await heic2any({
+                blob: file,
+                toType: "image/jpeg",
+                quality: 0.9,
+              });
+              file = new File([blob], file.name.replace(/\.heic$/i, ".jpg"), {
+                type: "image/jpeg",
+              });
+            } catch (err) {
+              console.error("HEIC conversion failed", err);
+              continue;
+            }
+          }
+
           const url = URL.createObjectURL(file);
           const img = new Image();
           img.src = url;
-          img.onload = () => setupPhoto(i, img);
-        });
+          await new Promise((resolve) => {
+            img.onload = () => {
+              setupPhoto(i, img);
+              resolve();
+            };
+          });
+        }
       }
 
       function clearGrid() {
