@@ -29,7 +29,6 @@
       #grid {
         display: grid;
         grid-template-columns: repeat(4, 160px);
-        grid-template-rows: repeat(3, 160px);
         gap: 6px;
         margin-bottom: 10px;
         justify-content: center;
@@ -72,6 +71,18 @@
         font-size: 16px;
         text-align: center;
       }
+
+      /* Responsive adjustments for smaller screens */
+      @media (max-width: 700px) {
+        #grid {
+          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+          width: 100%;
+        }
+        .photo-box {
+          width: 100%;
+          height: 120px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -94,16 +105,25 @@
 
       const cols = 4;
       const rows = 3;
-      const boxSize = 160;
+      const boxSizeDefault = 160;
+      const boxSizeMobile = 120;
       const maxPhotos = cols * rows;
       let photos = [];
 
-      for (let i = 0; i < maxPhotos; i++) {
-        const box = document.createElement("div");
-        box.className = "photo-box";
-        box.dataset.index = i;
-        grid.appendChild(box);
+      function getBoxSize() {
+        return window.innerWidth <= 700 ? boxSizeMobile : boxSizeDefault;
       }
+
+      function createGridBoxes() {
+        grid.innerHTML = "";
+        for (let i = 0; i < maxPhotos; i++) {
+          const box = document.createElement("div");
+          box.className = "photo-box";
+          box.dataset.index = i;
+          grid.appendChild(box);
+        }
+      }
+      createGridBoxes();
 
       dropArea.addEventListener("click", () => fileInput.click());
       dropArea.addEventListener("dragover", (e) => {
@@ -119,6 +139,14 @@
         handleFiles(e.dataTransfer.files);
       });
       fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
+
+      window.addEventListener("resize", () => {
+        // On resize, adjust all images positions and sizes to new box size
+        photos.forEach((photo, i) => {
+          if (!photo) return;
+          setupPhoto(i, photo.img);
+        });
+      });
 
       async function handleFiles(files) {
         const selected = Array.from(files).slice(0, maxPhotos);
@@ -163,6 +191,7 @@
       }
 
       function setupPhoto(index, img) {
+        const boxSize = getBoxSize();
         const box = grid.querySelector(`.photo-box[data-index="${index}"]`);
         if (!box) return;
 
@@ -193,6 +222,8 @@
           return Math.min(Math.max(v, min), max);
         }
 
+        img.style.cursor = "grab";
+
         img.addEventListener("mousedown", (e) => {
           dragging = true;
           dragStartX = e.clientX;
@@ -200,6 +231,7 @@
           imgStartLeft = parseFloat(img.style.left);
           imgStartTop = parseFloat(img.style.top);
           img.style.cursor = "grabbing";
+          e.preventDefault();
         });
 
         window.addEventListener("mousemove", (e) => {
@@ -215,6 +247,38 @@
         });
 
         window.addEventListener("mouseup", () => {
+          if (dragging) {
+            dragging = false;
+            img.style.cursor = "grab";
+          }
+        });
+
+        // Support touch events for mobile drag
+        img.addEventListener("touchstart", (e) => {
+          dragging = true;
+          const touch = e.touches[0];
+          dragStartX = touch.clientX;
+          dragStartY = touch.clientY;
+          imgStartLeft = parseFloat(img.style.left);
+          imgStartTop = parseFloat(img.style.top);
+          img.style.cursor = "grabbing";
+          e.preventDefault();
+        });
+
+        window.addEventListener("touchmove", (e) => {
+          if (!dragging) return;
+          const touch = e.touches[0];
+          const dx = touch.clientX - dragStartX;
+          const dy = touch.clientY - dragStartY;
+          let newLeft = clamp(imgStartLeft + dx, boxSize - displayWidth, 0);
+          let newTop = clamp(imgStartTop + dy, boxSize - displayHeight, 0);
+          img.style.left = newLeft + "px";
+          img.style.top = newTop + "px";
+          photos[index].offsetX = newLeft;
+          photos[index].offsetY = newTop;
+        });
+
+        window.addEventListener("touchend", () => {
           if (dragging) {
             dragging = false;
             img.style.cursor = "grab";
@@ -245,6 +309,7 @@
 
       function generateMergedImage() {
         const exportScale = 2.5;
+        const boxSize = getBoxSize();
         const canvasWidth = cols * boxSize * exportScale;
         const canvasHeight = rows * boxSize * exportScale;
         const canvas = document.createElement("canvas");
