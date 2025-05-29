@@ -7,3 +7,5 @@ Simple web app to create a 4x3 grid of square-cropped photos.
 - Click **Generate Image** to merge and download the final image.
 
 Open `index.html` in any modern browser (Mac/Windows).
+
+Vercel: https://photo-grid-omega.vercel.app/
