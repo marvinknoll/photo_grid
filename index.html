@@ -43,6 +43,9 @@
         background: #eee;
         cursor: grab;
         border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .photo-box img {
         position: absolute;
@@ -51,6 +54,22 @@
         -webkit-user-drag: none;
         -webkit-user-select: none;
         touch-action: none;
+      }
+      .spinner {
+        border: 3px solid #ccc;
+        border-top: 3px solid #00796b;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
       }
       button {
         background-color: #00796b;
@@ -73,7 +92,6 @@
         font-size: 16px;
         text-align: center;
       }
-
       @media (max-width: 700px) {
         #grid {
           grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -106,7 +124,6 @@
 
       const cols = 4;
       const rows = 3;
-      const boxSizeDesktop = 160;
       const maxPhotos = cols * rows;
       let photos = [];
 
@@ -137,8 +154,14 @@
         photos = [];
         clearGrid();
 
-        for (let i = 0; i < selected.length; i++) {
-          let file = selected[i];
+        const loadPromises = selected.map(async (file, i) => {
+          const box = grid.querySelector(`.photo-box[data-index="${i}"]`);
+          if (!box) return;
+
+          const spinner = document.createElement("div");
+          spinner.className = "spinner";
+          box.innerHTML = "";
+          box.appendChild(spinner);
 
           if (file.name.toLowerCase().endsWith(".heic")) {
             try {
@@ -152,20 +175,22 @@
               });
             } catch (err) {
               console.error("HEIC conversion failed", err);
-              continue;
+              return;
             }
           }
 
           const url = URL.createObjectURL(file);
           const img = new Image();
           img.src = url;
+
           await new Promise((resolve) => {
-            img.onload = () => {
-              setupPhoto(i, img);
-              resolve();
-            };
+            img.onload = () => resolve();
           });
-        }
+
+          setupPhoto(i, img);
+        });
+
+        await Promise.all(loadPromises);
       }
 
       function clearGrid() {
@@ -178,9 +203,8 @@
         const box = grid.querySelector(`.photo-box[data-index="${index}"]`);
         if (!box) return;
 
-        // Use actual box size dynamically:
         const rect = box.getBoundingClientRect();
-        const currentBoxSize = rect.width; // width and height are equal due to aspect-ratio
+        const currentBoxSize = rect.width;
 
         const imgRatio = img.naturalWidth / img.naturalHeight;
         let displayWidth, displayHeight;
@@ -252,12 +276,10 @@
           }
         }
 
-        // Remove old listeners before adding new ones to avoid duplicates
         img.onpointerdown = null;
         window.onpointermove = null;
         window.onpointerup = null;
 
-        // Use pointer events for better support of mouse + touch
         img.addEventListener("pointerdown", onPointerDown);
         window.addEventListener("pointermove", onPointerMove);
         window.addEventListener("pointerup", onPointerUp);
@@ -276,7 +298,6 @@
         };
       }
 
-      // Recalculate all images on resize (to keep squares and reposition images)
       window.addEventListener("resize", () => {
         for (let i = 0; i < photos.length; i++) {
           const photo = photos[i];
@@ -294,15 +315,21 @@
       });
 
       function generateMergedImage() {
-        const exportScale = 2.5;
-        const canvasWidth = cols * boxSizeDesktop * exportScale;
-        const canvasHeight = rows * boxSizeDesktop * exportScale;
+        const box = document.querySelector(".photo-box");
+        const boxSize = box.getBoundingClientRect().width;
+        const exportScale = window.devicePixelRatio * 3;
+
+        const canvasWidth = cols * boxSize * exportScale;
+        const canvasHeight = rows * boxSize * exportScale;
         const canvas = document.createElement("canvas");
         canvas.width = canvasWidth;
         canvas.height = canvasHeight;
+
         const ctx = canvas.getContext("2d");
         ctx.fillStyle = "#fff";
         ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
 
         for (let i = 0; i < maxPhotos; i++) {
           const photo = photos[i];
@@ -310,16 +337,16 @@
 
           const col = i % cols;
           const row = Math.floor(i / cols);
-          const destX = col * boxSizeDesktop;
-          const destY = row * boxSizeDesktop;
+          const destX = Math.floor(col * boxSize * exportScale);
+          const destY = Math.floor(row * boxSize * exportScale);
 
           const scaleX = photo.naturalWidth / photo.displayWidth;
           const scaleY = photo.naturalHeight / photo.displayHeight;
 
-          const srcX = -photo.offsetX * scaleX;
-          const srcY = -photo.offsetY * scaleY;
-          const srcWidth = boxSizeDesktop * scaleX;
-          const srcHeight = boxSizeDesktop * scaleY;
+          const srcX = Math.max(0, -photo.offsetX * scaleX);
+          const srcY = Math.max(0, -photo.offsetY * scaleY);
+          const srcWidth = boxSize * scaleX;
+          const srcHeight = boxSize * scaleY;
 
           ctx.drawImage(
             photo.img,
@@ -327,10 +354,10 @@
             srcY,
             srcWidth,
             srcHeight,
-            destX * exportScale,
-            destY * exportScale,
-            boxSizeDesktop * exportScale,
-            boxSizeDesktop * exportScale
+            destX,
+            destY,
+            boxSize * exportScale,
+            boxSize * exportScale
           );
         }
 
