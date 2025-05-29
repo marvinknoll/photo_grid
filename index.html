@@ -364,7 +364,18 @@
         const dataURL = canvas.toDataURL("image/png");
         downloadLink.href = dataURL;
         downloadLink.style.display = "inline-block";
-        downloadLink.click();
+        // Detect if on iOS Safari
+        const isIOS =
+          /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+        if (isIOS) {
+          // Open in new tab for manual save
+          window.open(dataURL, "_blank");
+          alert("Image opened in a new tab. Tap and hold to save.");
+        } else {
+          // Trigger download normally
+          downloadLink.click();
+        }
       }
     </script>
   </body>
