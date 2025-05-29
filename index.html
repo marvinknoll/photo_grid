@@ -317,7 +317,13 @@
       function generateMergedImage() {
         const box = document.querySelector(".photo-box");
         const boxSize = box.getBoundingClientRect().width;
-        const exportScale = window.devicePixelRatio * 3;
+
+        // Detect mobile device user agent (simple)
+        const isMobile = /iPad|iPhone|iPod|Android/.test(navigator.userAgent);
+
+        // Cap exportScale on mobile to avoid large canvas crashes
+        const baseScale = window.devicePixelRatio * 3;
+        const exportScale = isMobile ? Math.min(baseScale, 1) : baseScale;
 
         const canvasWidth = cols * boxSize * exportScale;
         const canvasHeight = rows * boxSize * exportScale;
